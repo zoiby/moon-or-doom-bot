@@ -269,6 +269,7 @@ def check_for_win():
                     unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
                 elif round_data['result']['result'] == "DOOM" and latest_entry['position'][0] == "moon":
                     stat_tracker['moon']['winnings'] -= float(latest_entry['wager'][0])
+                    stat_tracker['moon']['win_percent'] = round((stat_tracker['moon']['wins'] / stat_tracker['moon']['entry_count']) * 100, 2)
                 elif round_data['result']['result'] == "DOOM" and latest_entry['position'][0] == "doom":
                     stat_tracker['doom']['wins'] += 1
                     stat_tracker['doom']['win_percent'] = round((stat_tracker['doom']['wins'] / stat_tracker['doom']['entry_count']) * 100, 2)
@@ -277,6 +278,7 @@ def check_for_win():
                     unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
                 elif round_data['result']['result'] == "MOON" and latest_entry['position'][0] == "doom":
                     stat_tracker['doom']['winnings'] -= float(latest_entry['wager'][0])
+                    stat_tracker['doom']['win_percent'] = round((stat_tracker['doom']['wins'] / stat_tracker['doom']['entry_count']) * 100, 2)
 
                 stat_tracker['total']['entry_count'] = stat_tracker['moon']['entry_count'] + stat_tracker['doom']['entry_count']
                 stat_tracker['total']['wins'] = stat_tracker['moon']['wins'] + stat_tracker['doom']['wins']
