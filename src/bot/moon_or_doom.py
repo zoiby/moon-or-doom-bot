@@ -1,14 +1,13 @@
 import os
+from textwrap import dedent
 import time
 import atexit
 import requests
 import bot_core
 
 from web3 import Web3
-from textwrap import dedent
-from dotenv import load_dotenv
 from inputimeout import inputimeout, TimeoutOccurred
-
+from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
@@ -51,8 +50,10 @@ latest_entry = {
     "position": []
 }
 
-unclaimed_win_epochs = []
-unclaimed_win_amount = 0
+unclaimed_win = {
+    "epochs": [],
+    "amount": 0
+}
 
 WETH_ADDRESS = os.environ.get("WETH_ADDRESS") # Blast L2 WETH address
 CONTRACT_ADDRESS = os.environ.get("MOD_CONTRACT_ADDRESS") # Moon or Doom Contract Address
@@ -116,7 +117,7 @@ def moon_or_doom():
                     Doom Winnings: {stat_tracker['doom']['winnings']}{bcolors.ENDC}\n\n \
 \
 {bcolors.OKBLACK}Session Profit: {bcolors.ENDC}{bcolors.OKGREEN}{stat_tracker['total']['winnings']}{bcolors.ENDC}{bcolors.OKBLACK} ETH{bcolors.ENDC}\t\t\t{bcolors.OKBLACK}Total Gas Fees: {bcolors.ENDC}{bcolors.BURNTORANGE}{round(stat_tracker['gas_fees']['total'], 2)}{bcolors.ENDC}{bcolors.OKBLACK} USD{bcolors.ENDC}\n \
-{bcolors.OKBLACK}Unclaimed Profit: {bcolors.ENDC}{bcolors.OKGREEN}{unclaimed_win_amount}{bcolors.ENDC}{bcolors.OKBLACK} ETH{bcolors.ENDC} \
+{bcolors.OKBLACK}Unclaimed Profit: {bcolors.ENDC}{bcolors.OKGREEN}{unclaimed_win['amount']}{bcolors.ENDC}{bcolors.OKBLACK} ETH{bcolors.ENDC} \
                 ")
                 continue
             elif user_input in ["m", "d"]:
@@ -264,14 +265,16 @@ def check_for_win():
                     stat_tracker['moon']['wins'] += 1
                     stat_tracker['moon']['win_percent'] = round((stat_tracker['moon']['wins'] / stat_tracker['moon']['entry_count']) * 100, 2)
                     stat_tracker['moon']['winnings'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
-                    unclaimed_win_epochs.append(round_data['onChainId'])
+                    unclaimed_win['epochs'].append(round_data['onChainId'])
+                    unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
                 elif round_data['result']['result'] == "DOOM" and latest_entry['position'][0] == "moon":
                     stat_tracker['moon']['winnings'] -= float(latest_entry['wager'][0])
                 elif round_data['result']['result'] == "DOOM" and latest_entry['position'][0] == "doom":
                     stat_tracker['doom']['wins'] += 1
                     stat_tracker['doom']['win_percent'] = round((stat_tracker['doom']['wins'] / stat_tracker['doom']['entry_count']) * 100, 2)
                     stat_tracker['doom']['winnings'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
-                    unclaimed_win_epochs.append(round_data['onChainId'])
+                    unclaimed_win['epochs'].append(round_data['onChainId'])
+                    unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
                 elif round_data['result']['result'] == "MOON" and latest_entry['position'][0] == "doom":
                     stat_tracker['doom']['winnings'] -= float(latest_entry['wager'][0])
 
@@ -286,11 +289,11 @@ def check_for_win():
                 del latest_entry['wager'][index_of_epoch]
 
 def claim_winnings():
-    if len(unclaimed_win_epochs) == 0:
+    if len(unclaimed_win['epochs']) == 0:
         print (f"{bcolors.OKYELLOW}No winnings to claim.{bcolors.ENDC}")
     else:
         claim_txn = mod_contract.functions.claim(
-            unclaimed_win_epochs
+            unclaimed_win['epochs']
         ).build_transaction({
             'from': account.address,
             'gas': 0,
@@ -305,7 +308,8 @@ def claim_winnings():
 
         if claim_status == 1:
             print(f"{bcolors.OKGREEN}Winnings claimed successfully!{bcolors.ENDC}")
-            unclaimed_win_epochs.clear()
+            unclaimed_win['epochs'].clear()
+            unclaimed_win['amount'] = 0
         else:
             print(f"{bcolors.FAIL}Error claiming winnings. Please try again.{bcolors.ENDC}")
 
