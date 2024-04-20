@@ -77,8 +77,8 @@ def moon_or_doom():
     while True:
         try:
             if wager == 0:
-                wager = float(input("How much ETH would you like to wager?\n"))
-            print(f"\n{bcolors.OKBLACK}Current wager is:{bcolors.ENDC}{bcolors.OKGREEN} {wager} {bcolors.ENDC}{bcolors.OKBLACK}ETH{bcolors.ENDC}\n")
+                wager = float(input(f"\nHow much ETH would you like to wager? Your current ETH balance is: {get_user_balance()}\n"))
+            print(f"\n{bcolors.OKCYAN}Current wager is:{bcolors.ENDC}{bcolors.BURNTORANGE} {wager} {bcolors.ENDC}{bcolors.OKCYAN}ETH\t\t\tCurrent ETH Balance: {bcolors.ENDC}{bcolors.BURNTORANGE}{get_user_balance()}{bcolors.ENDC}{bcolors.OKCYAN} ETH{bcolors.ENDC}\n")
             wei_wager = web3.to_wei(wager, 'ether')
             try: 
                 user_input = inputimeout(prompt="Moon or Doom? ('m' or 'd' || 'w' to change wager, 'c' claim winnings, 'x' to exit): ", timeout=time_limit).lower()
@@ -89,7 +89,7 @@ def moon_or_doom():
                 break
 
             elif user_input == "w":
-                wager = float(input("How much ETH would you like to wager?\n"))
+                wager = float(input(f"How much ETH would you like to wager? Your current ETH balance is: {get_user_balance()}\n"))
                 wei_wager = web3.to_wei(wager, 'ether')
                 continue
 
@@ -102,22 +102,22 @@ def moon_or_doom():
                 check_for_win()
                 print("\033c", end="")
                 print(f"\n \
-{bcolors.OKCYAN}Session: {(int(time.time()) - stat_tracker['start_epoch']) / 60:.2f} minutes\t\t\t\tCurrent Epoch: {current_epoch}{bcolors.ENDC}\n\n \
+{bcolors.OKCYAN}Session: {bcolors.ENDC}{bcolors.BURNTORANGE}{(int(time.time()) - stat_tracker['start_epoch']) / 60:.2f}{bcolors.ENDC}{bcolors.OKCYAN} minutes\t\t\t\tCurrent Epoch: {bcolors.ENDC}{bcolors.BURNTORANGE}{current_epoch}{bcolors.ENDC}\n\n\
 {bcolors.OKGREEN}\
-                    Moon Entries: {stat_tracker['moon']['entry_count']}\n \
-                    Moon Wins: {stat_tracker['moon']['wins']}\n \
-                    Moon Win %: {stat_tracker['moon']['win_percent']:.2f}\n \
-                    Moon ETH Wagered: {stat_tracker['moon']['wagered']}\n \
-                    Moon Winnings: {stat_tracker['moon']['winnings']}{bcolors.ENDC}\n\n \
+                    Moon Entries: {stat_tracker['moon']['entry_count']}\n\
+                    Moon Wins: {stat_tracker['moon']['wins']}\n\
+                    Moon Win %: {stat_tracker['moon']['win_percent']:.2f}\n\
+                    Moon ETH Wagered: {stat_tracker['moon']['wagered']}\n\
+                    Moon Winnings: {stat_tracker['moon']['winnings']}{bcolors.ENDC}\n\n\
 {bcolors.OKRED}\
-                    Doom Entries: {stat_tracker['doom']['entry_count']}\n \
-                    Doom Wins: {stat_tracker['doom']['wins']}\n \
-                    Doom Win %: {stat_tracker['doom']['win_percent']:.2f}\n \
-                    Doom ETH Wagered: {stat_tracker['doom']['wagered']}\n \
-                    Doom Winnings: {stat_tracker['doom']['winnings']}{bcolors.ENDC}\n\n \
+                    Doom Entries: {stat_tracker['doom']['entry_count']}\n\
+                    Doom Wins: {stat_tracker['doom']['wins']}\n\
+                    Doom Win %: {stat_tracker['doom']['win_percent']:.2f}\n\
+                    Doom ETH Wagered: {stat_tracker['doom']['wagered']}\n\
+                    Doom Winnings: {stat_tracker['doom']['winnings']}{bcolors.ENDC}\n\n\
 \
-{bcolors.OKBLACK}Session Profit: {bcolors.ENDC}{bcolors.OKGREEN}{stat_tracker['total']['winnings']}{bcolors.ENDC}{bcolors.OKBLACK} ETH{bcolors.ENDC}\t\t\t{bcolors.OKBLACK}Total Gas Fees: {bcolors.ENDC}{bcolors.BURNTORANGE}{round(stat_tracker['gas_fees']['total'], 2)}{bcolors.ENDC}{bcolors.OKBLACK} USD{bcolors.ENDC}\n \
-{bcolors.OKBLACK}Unclaimed Profit: {bcolors.ENDC}{bcolors.OKGREEN}{unclaimed_win['amount']}{bcolors.ENDC}{bcolors.OKBLACK} ETH{bcolors.ENDC} \
+{bcolors.OKCYAN}Session Profit: {bcolors.ENDC}{bcolors.BURNTORANGE}{stat_tracker['total']['winnings']}{bcolors.ENDC}{bcolors.OKCYAN} ETH{bcolors.ENDC}\t\t\t\t{bcolors.OKCYAN}Total Gas Fees: {bcolors.ENDC}{bcolors.BURNTORANGE}{round(stat_tracker['gas_fees']['total'], 2)}{bcolors.ENDC}{bcolors.OKCYAN} USD{bcolors.ENDC}\n\
+{bcolors.OKCYAN}Claimable: {bcolors.ENDC}{bcolors.BURNTORANGE}{unclaimed_win['amount']}{bcolors.ENDC}{bcolors.OKCYAN} ETH{bcolors.ENDC} \
                 ")
                 continue
             elif user_input in ["m", "d"]:
@@ -193,10 +193,10 @@ def sign_and_send_transaction(yolo_txn):
 
 def process_txn_receipt(txn_receipt):
     parsed_receipt = receipt_to_dict(txn_receipt)
+    gas_fee_usd = round(float(get_eth_to_usd_rate() * float(web3.from_wei(int(parsed_receipt['l1Fee'], 16), 'ether'))), 2)
+    stat_tracker['gas_fees']['total'] += gas_fee_usd
     if parsed_receipt['status'] == 1:
-        gas_fee_usd = round(float(get_eth_to_usd_rate() * float(web3.from_wei(int(parsed_receipt['l1Fee'], 16), 'ether'))), 2)
         print(f"Txn successful: {parsed_receipt['transactionHash']} || Gas Fee: {gas_fee_usd}")
-        stat_tracker['gas_fees']['total'] += gas_fee_usd
         return parsed_receipt['status']
     else:
         print(f"Txn failed: {parsed_receipt['transactionHash']} || Either an error occurred or it was too late to enter this round.")
@@ -208,18 +208,10 @@ def get_current_yolo_epoch():
     return current_yolo_epoch
 
 
-def get_gas_estimate(wei_wager):
-    try:
-        gas_estimate = mod_contract.functions.enterMoon(
-            wei_wager
-        ).estimate_gas({
-            'from': account.address,
-            'value': wei_wager,
-        })
-        return gas_estimate
-    except Exception as e:
-        print(f"Error getting gas estimate: {e}")
-        return 0
+def get_user_balance():
+    balance = web3.eth.get_balance(account.address)
+    return round(web3.from_wei(balance, 'ether'), 5)
+
 
 def get_eth_to_usd_rate():
     url = f"https://api.thruster.finance/token/price?tokenAddress={WETH_ADDRESS}&chainId=81457"
@@ -266,7 +258,7 @@ def check_for_win():
                     stat_tracker['moon']['win_percent'] = round((stat_tracker['moon']['wins'] / stat_tracker['moon']['entry_count']) * 100, 2)
                     stat_tracker['moon']['winnings'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
                     unclaimed_win['epochs'].append(round_data['onChainId'])
-                    unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
+                    unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5)
                 elif round_data['result']['result'] == "DOOM" and latest_entry['position'][0] == "moon":
                     stat_tracker['moon']['winnings'] -= float(latest_entry['wager'][0])
                     stat_tracker['moon']['win_percent'] = round((stat_tracker['moon']['wins'] / stat_tracker['moon']['entry_count']) * 100, 2)
@@ -275,7 +267,7 @@ def check_for_win():
                     stat_tracker['doom']['win_percent'] = round((stat_tracker['doom']['wins'] / stat_tracker['doom']['entry_count']) * 100, 2)
                     stat_tracker['doom']['winnings'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
                     unclaimed_win['epochs'].append(round_data['onChainId'])
-                    unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5) - float(latest_entry['wager'][0])
+                    unclaimed_win['amount'] += round(float(latest_entry['wager'][0]) * float(round_data['result']['payoutRatio']), 5)
                 elif round_data['result']['result'] == "MOON" and latest_entry['position'][0] == "doom":
                     stat_tracker['doom']['winnings'] -= float(latest_entry['wager'][0])
                     stat_tracker['doom']['win_percent'] = round((stat_tracker['doom']['wins'] / stat_tracker['doom']['entry_count']) * 100, 2)
@@ -351,6 +343,7 @@ class bcolors:
     OKRED = '\033[31m'
     OKYELLOW = '\033[33m'
     OKBLACK = '\033[30m'
+    OKGREY = '\033[90m'
     WARNING = '\033[93m'
     FAIL = '\033[91m'
     ENDC = '\033[0m'
@@ -362,3 +355,4 @@ class bcolors:
 if __name__ == "__main__":
     atexit.register(log_handler)
     moon_or_doom()
+    
