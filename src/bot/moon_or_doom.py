@@ -73,15 +73,32 @@ def moon_or_doom():
     stat_tracker['start_epoch'] = start_epoch
     last_known_prices['eth'] = get_eth_to_usd_rate()
     wager = 0
+    auto_claim_threshold = 0
     time_limit = 10
     while True:
         try:
             if wager == 0:
                 wager = float(input(f"\nHow much ETH would you like to wager? Your current ETH balance is: {get_user_balance()}\n"))
-            print(f"\n{bcolors.OKCYAN}Current wager is:{bcolors.ENDC}{bcolors.BURNTORANGE} {wager} {bcolors.ENDC}{bcolors.OKCYAN}ETH\t\t\tCurrent ETH Balance: {bcolors.ENDC}{bcolors.BURNTORANGE}{get_user_balance()}{bcolors.ENDC}{bcolors.OKCYAN} ETH{bcolors.ENDC}\n")
+                auto_claim_threshold = float(input(f"\nWould you like to use auto-claim? At what ETH balance would you like to auto-claim at? (0 to disable)\n"))
+                auto_bet = input(f"\nWould you like to enable auto-bet? (y/n)\n").lower()
+                if auto_bet == "y":
+                    moon_position = input(f"\n Would you like to auto-bet moon (m) or doom (d)?\n")
+                elif auto_bet == "n":
+                    moon_position = None
+            print(f"\n{bcolors.OKCYAN}Current wager is:{bcolors.BURNTORANGE} {wager} {bcolors.OKCYAN}ETH\t\t\tCurrent ETH Balance: {bcolors.BURNTORANGE}{get_user_balance()}{bcolors.OKCYAN} ETH{bcolors.ENDC}\n")
             wei_wager = web3.to_wei(wager, 'ether')
             try: 
-                user_input = inputimeout(prompt="Moon or Doom? ('m' or 'd' || 'w' to change wager, 'c' claim winnings, 'x' to exit): ", timeout=time_limit).lower()
+                if auto_claim_threshold > 0 and get_user_balance() < auto_claim_threshold:
+                    claim_winnings()
+                if moon_position is None:
+                    user_input = inputimeout(prompt="Moon or Doom? ('m' or 'd' || 'w' to change wager, 'c' claim winnings, 'x' to exit): ", timeout=time_limit).lower()
+                else:
+                    if len(latest_entry['epoch']) > 0 and latest_entry['epoch'][-1] == get_current_yolo_epoch():
+                        time.sleep(10)
+                        user_input = "s"
+                    else:
+                        time.sleep(5)
+                        user_input = moon_position
             except TimeoutOccurred:
                 user_input = "s"
             
@@ -97,27 +114,27 @@ def moon_or_doom():
                 claim_winnings()
                 continue
 
-            elif user_input == "s":
+            elif user_input == "s":                    
                 current_epoch = get_current_yolo_epoch()
-                check_for_win()
+                check_for_win(account.address)
                 print("\033c", end="")
                 print(f"\n \
-{bcolors.OKCYAN}Session: {bcolors.ENDC}{bcolors.BURNTORANGE}{(int(time.time()) - stat_tracker['start_epoch']) / 60:.2f}{bcolors.ENDC}{bcolors.OKCYAN} minutes\t\t\t\tCurrent Epoch: {bcolors.ENDC}{bcolors.BURNTORANGE}{current_epoch}{bcolors.ENDC}\n\n\
+{bcolors.OKCYAN}Session: {bcolors.BURNTORANGE}{(int(time.time()) - stat_tracker['start_epoch']) / 60:.2f}{bcolors.OKCYAN} minutes\t\t\t\tCurrent Epoch: {bcolors.BURNTORANGE}{current_epoch}\n\n\
 {bcolors.OKGREEN}\
                     Moon Entries: {stat_tracker['moon']['entry_count']}\n\
                     Moon Wins: {stat_tracker['moon']['wins']}\n\
                     Moon Win %: {stat_tracker['moon']['win_percent']:.2f}\n\
                     Moon ETH Wagered: {stat_tracker['moon']['wagered']}\n\
-                    Moon Winnings: {stat_tracker['moon']['winnings']}{bcolors.ENDC}\n\n\
+                    Moon Winnings: {stat_tracker['moon']['winnings']}\n\n\
 {bcolors.OKRED}\
                     Doom Entries: {stat_tracker['doom']['entry_count']}\n\
                     Doom Wins: {stat_tracker['doom']['wins']}\n\
                     Doom Win %: {stat_tracker['doom']['win_percent']:.2f}\n\
                     Doom ETH Wagered: {stat_tracker['doom']['wagered']}\n\
-                    Doom Winnings: {stat_tracker['doom']['winnings']}{bcolors.ENDC}\n\n\
+                    Doom Winnings: {stat_tracker['doom']['winnings']}\n\n\
 \
-{bcolors.OKCYAN}Session Profit: {bcolors.ENDC}{bcolors.BURNTORANGE}{stat_tracker['total']['winnings']}{bcolors.ENDC}{bcolors.OKCYAN} ETH{bcolors.ENDC}\t\t\t\t{bcolors.OKCYAN}Total Gas Fees: {bcolors.ENDC}{bcolors.BURNTORANGE}{round(stat_tracker['gas_fees']['total'], 2)}{bcolors.ENDC}{bcolors.OKCYAN} USD{bcolors.ENDC}\n\
-{bcolors.OKCYAN}Claimable: {bcolors.ENDC}{bcolors.BURNTORANGE}{unclaimed_win['amount']}{bcolors.ENDC}{bcolors.OKCYAN} ETH{bcolors.ENDC} \
+{bcolors.OKCYAN}Session Profit: {bcolors.BURNTORANGE}{stat_tracker['total']['winnings']}{bcolors.OKCYAN} ETH\t\t\t\t{bcolors.OKCYAN}Total Gas Fees: {bcolors.BURNTORANGE}$ {round(stat_tracker['gas_fees']['total'], 2)}{bcolors.OKCYAN} USD\n\
+{bcolors.OKCYAN}Claimable: {bcolors.BURNTORANGE}{unclaimed_win['amount']}{bcolors.OKCYAN} ETH{bcolors.ENDC}\
                 ")
                 continue
             elif user_input in ["m", "d"]:
@@ -214,11 +231,11 @@ def get_user_balance():
 
 
 def get_eth_to_usd_rate():
-    url = f"https://api.thruster.finance/token/price?tokenAddress={WETH_ADDRESS}&chainId=81457"
+    url = f"https://api.blastscan.io/api?module=stats&action=ethprice&apikey=XZ9I3E88VZ9PTMZDJRYJ16KPGS2EJ8WS3C"
 
     try:
         response = requests.get(url).json()
-        return response['price']
+        return float(response['result']['ethusd'])
     except Exception as e:
         return last_known_prices['eth']
 
@@ -245,8 +262,8 @@ def _parse_value(val):
         return val
     
 
-def check_for_win():
-    query = {"query":"\n    query MoDRounds($filter: MoDFilterInput!, $player: Address, $pagination: PaginationInput) {\n      modRounds(filter: $filter, pagination: $pagination) {\n        ...MoDRound\n      }\n    }\n    \n  fragment MoDRound on MoDRound {\n    id\n    onChainId\n    startedAt\n    lockedAt\n    closedAt\n    lockPrice\n    closePrice\n\n    totalAmount\n    moonAmount\n    moonPayoutRatio\n    doomAmount\n    doomPayoutRatio\n    status\n    result {\n      ...MoDRoundResult\n    }\n\n    setting {\n      ...MoDRoundSetting\n    }\n    entries(player: $player) {\n      ...MoDEntry\n    }\n  }\n  \n  fragment MoDRoundResult on MoDRoundResult {\n    result\n    payoutRatio\n  }\n\n  \n  fragment MoDRoundSetting on MoDRoundSetting {\n    minimumEnterAmount\n    roundIntervalSecs\n  }\n\n  \n  fragment MoDEntry on MoDEntry {\n    moonPosition\n    amount\n    payoutAmount\n  }\n\n\n  ","variables":{"filter":{"contract":"MOON_OR_DOOM_ETHUSD_V1_BLAST","status":["CANCELLED","CLOSED"]},"player":"0xA9D8963402f6575995B4c3e66f64583D890e6bbf","pagination":{"first":1}},"operationName":"MoDRounds"}
+def check_for_win(address):
+    query = {"query":"\n    query MoDRounds($filter: MoDFilterInput!, $player: Address, $pagination: PaginationInput) {\n      modRounds(filter: $filter, pagination: $pagination) {\n        ...MoDRound\n      }\n    }\n    \n  fragment MoDRound on MoDRound {\n    id\n    onChainId\n    startedAt\n    lockedAt\n    closedAt\n    lockPrice\n    closePrice\n\n    totalAmount\n    moonAmount\n    moonPayoutRatio\n    doomAmount\n    doomPayoutRatio\n    status\n    result {\n      ...MoDRoundResult\n    }\n\n    setting {\n      ...MoDRoundSetting\n    }\n    entries(player: $player) {\n      ...MoDEntry\n    }\n  }\n  \n  fragment MoDRoundResult on MoDRoundResult {\n    result\n    payoutRatio\n  }\n\n  \n  fragment MoDRoundSetting on MoDRoundSetting {\n    minimumEnterAmount\n    roundIntervalSecs\n  }\n\n  \n  fragment MoDEntry on MoDEntry {\n    moonPosition\n    amount\n    payoutAmount\n  }\n\n\n  ","variables":{"filter":{"contract":"MOON_OR_DOOM_ETHUSD_V1_BLAST","status":["CANCELLED","CLOSED"]},"player":address,"pagination":{"first":1}},"operationName":"MoDRounds"}
     response = requests.post("https://graphql.yologames.io/graphql", json=query).json()
 
     if 'data' in response:
@@ -307,6 +324,7 @@ def claim_winnings():
         else:
             print(f"{bcolors.FAIL}Error claiming winnings. Please try again.{bcolors.ENDC}")
 
+
 def log_session_summary():
     epoch = int(time.time())
     file = open(f"../../logs/mod-summary-{epoch}.log", "w")
@@ -350,6 +368,8 @@ class bcolors:
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
     BURNTORANGE = '\033[38;5;208m'
+    # Background colors below
+    BG_BLACK = '\033[40m'
 
 
 if __name__ == "__main__":
