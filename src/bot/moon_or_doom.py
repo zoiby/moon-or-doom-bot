@@ -2,8 +2,10 @@ import os
 from textwrap import dedent
 import time
 import atexit
+import asyncio
 import requests
 import bot_core
+import keyboard
 
 from web3 import Web3
 from inputimeout import inputimeout, TimeoutOccurred
@@ -68,7 +70,7 @@ mod_contract = web3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
 account = bot_core.initialize_hot_wallet()
 
 
-def moon_or_doom():
+async def moon_or_doom():
     start_epoch = int(time.time())
     stat_tracker['start_epoch'] = start_epoch
     last_known_prices['eth'] = get_eth_to_usd_rate()
@@ -78,26 +80,38 @@ def moon_or_doom():
     while True:
         try:
             if wager == 0:
-                wager = float(input(f"\nHow much ETH would you like to wager? Your current ETH balance is: {get_user_balance()}\n"))
-                auto_claim_threshold = float(input(f"\nWould you like to use auto-claim? At what ETH balance would you like to auto-claim at? (0 to disable)\n"))
+                wager = remove_leading_zero(float(input(f"\nHow much ETH would you like to wager? Your current ETH balance is: {get_user_balance()}\n")))
+                auto_claim_threshold = remove_leading_zero(float(input(f"\nWould you like to use auto-claim? At what ETH balance would you like to auto-claim at? (0 to disable)\n")))
                 auto_bet = input(f"\nWould you like to enable auto-bet? (y/n)\n").lower()
                 if auto_bet == "y":
-                    moon_position = input(f"\n Would you like to auto-bet moon (m) or doom (d)?\n")
+                    moon_position = input(f"\nWould you like to auto-bet moon (m) or doom (d)?\n")
+                    print_stats(auto_claim_threshold)
                 elif auto_bet == "n":
                     moon_position = None
             print(f"\n{bcolors.OKCYAN}Current wager is:{bcolors.BURNTORANGE} {wager} {bcolors.OKCYAN}ETH\t\t\tCurrent ETH Balance: {bcolors.BURNTORANGE}{get_user_balance()}{bcolors.OKCYAN} ETH{bcolors.ENDC}\n")
             wei_wager = web3.to_wei(wager, 'ether')
-            try: 
+            try:
+                if keyboard.is_pressed('esc') and auto_bet == "y":
+                    print(f"{bcolors.OKYELLOW}You have exited this session of auto-bet, you are now in manual mode.\n{bcolors.OKRED}There is an option to re-enable auto-bet in the main menu.{bcolors.ENDC}")
+                    auto_bet == "n"
+                    moon_position = None
+                    continue
                 if auto_claim_threshold > 0 and get_user_balance() < auto_claim_threshold:
-                    claim_winnings()
+                    if len(unclaimed_win['epochs']) > 0:
+                        claim_winnings()
+                    elif len(unclaimed_win['epochs']) == 0:
+                        are_you_sure = input(f"{bcolors.OKYELLOW}No winnings to claim and you are below your auto-claim threshold.\n\nAre you sure you want to continue? (y/n){bcolors.ENDC}")
+                        if are_you_sure.lower() != "y":
+                            break
+
                 if moon_position is None:
-                    user_input = inputimeout(prompt="Moon or Doom? ('m' or 'd' || 'w' to change wager, 'c' claim winnings, 'x' to exit): ", timeout=time_limit).lower()
+                    user_input = inputimeout(prompt="Moon or Doom? ('m' or 'd' || 'w' to change wager, 'c' claim winnings, 'auto' for auto-bet, 'x' to exit): ", timeout=time_limit).lower()
                 else:
                     if len(latest_entry['epoch']) > 0 and latest_entry['epoch'][-1] == get_current_yolo_epoch():
-                        time.sleep(10)
+                        await asyncio.sleep(10)
                         user_input = "s"
                     else:
-                        time.sleep(5)
+                        await asyncio.sleep(5)
                         user_input = moon_position
             except TimeoutOccurred:
                 user_input = "s"
@@ -112,30 +126,18 @@ def moon_or_doom():
 
             elif user_input == "c":
                 claim_winnings()
+                asyncio.sleep(5)
+                print_stats()
                 continue
 
+            elif user_input == "auto":
+                print(f"\n{bcolors.OKYELLOW}You have selected auto-bet mode. You may hold down the {bcolors.OKRED}ESCAPE{bcolors.OKYELLOW} key at any time until the auto-bet feature stops.\n\n{bcolors.ENDC}")
+                auto_bet = "y"
+                moon_position = input(f"\nWould you like to auto-bet moon (m) or doom (d)?\n")
+                auto_claim_threshold = float(input(f"\nYou may now set your auto claim threshold, if your ETH balance falls below this number the bot will auto-claim winnings. (0 to disable)\n"))
+                continue
             elif user_input == "s":                    
-                current_epoch = get_current_yolo_epoch()
-                check_for_win(account.address)
-                print("\033c", end="")
-                print(f"\n \
-{bcolors.OKCYAN}Session: {bcolors.BURNTORANGE}{(int(time.time()) - stat_tracker['start_epoch']) / 60:.2f}{bcolors.OKCYAN} minutes\t\t\t\tCurrent Epoch: {bcolors.BURNTORANGE}{current_epoch}\n\n\
-{bcolors.OKGREEN}\
-                    Moon Entries: {stat_tracker['moon']['entry_count']}\n\
-                    Moon Wins: {stat_tracker['moon']['wins']}\n\
-                    Moon Win %: {stat_tracker['moon']['win_percent']:.2f}\n\
-                    Moon ETH Wagered: {stat_tracker['moon']['wagered']}\n\
-                    Moon Winnings: {stat_tracker['moon']['winnings']}\n\n\
-{bcolors.OKRED}\
-                    Doom Entries: {stat_tracker['doom']['entry_count']}\n\
-                    Doom Wins: {stat_tracker['doom']['wins']}\n\
-                    Doom Win %: {stat_tracker['doom']['win_percent']:.2f}\n\
-                    Doom ETH Wagered: {stat_tracker['doom']['wagered']}\n\
-                    Doom Winnings: {stat_tracker['doom']['winnings']}\n\n\
-\
-{bcolors.OKCYAN}Session Profit: {bcolors.BURNTORANGE}{stat_tracker['total']['winnings']}{bcolors.OKCYAN} ETH\t\t\t\t{bcolors.OKCYAN}Total Gas Fees: {bcolors.BURNTORANGE}$ {round(stat_tracker['gas_fees']['total'], 2)}{bcolors.OKCYAN} USD\n\
-{bcolors.OKCYAN}Claimable: {bcolors.BURNTORANGE}{unclaimed_win['amount']}{bcolors.OKCYAN} ETH{bcolors.ENDC}\
-                ")
+                print_stats(auto_claim_threshold)
                 continue
             elif user_input in ["m", "d"]:
                 yolo_txn = build_transaction(wei_wager, user_input)
@@ -156,6 +158,7 @@ def moon_or_doom():
 
                         latest_entry['wager'].append(wager)
                         latest_entry['epoch'].append(get_current_yolo_epoch())
+                        print_stats(auto_claim_threshold)
                 else:
                     print("Error building transaction. Please try again.")
                     continue
@@ -165,7 +168,6 @@ def moon_or_doom():
             
         except Exception as e:
             print(f"Error: {e}")
-            time.sleep(10)
 
 
 def build_transaction(wei_wager, user_input):
@@ -238,6 +240,38 @@ def get_eth_to_usd_rate():
         return float(response['result']['ethusd'])
     except Exception as e:
         return last_known_prices['eth']
+
+
+def remove_leading_zero(value):
+    input_str = str(value)
+    if input_str.startswith("0."):
+        return float(input_str[1:])
+    else:
+        return value
+
+
+def print_stats(auto_claim_threshold):
+    current_epoch = get_current_yolo_epoch()
+    check_for_win(account.address)
+    print("\033c", end="")
+    print(f"\n \
+{bcolors.OKCYAN}Session: {bcolors.BURNTORANGE}{(int(time.time()) - stat_tracker['start_epoch']) / 60:.2f}{bcolors.OKCYAN} minutes\t\t\t\tCurrent Epoch: {bcolors.BURNTORANGE}{current_epoch}\n\n\
+{bcolors.OKGREEN}\
+        Moon Entries: {stat_tracker['moon']['entry_count']}\n\
+        Moon Wins: {stat_tracker['moon']['wins']}\n\
+        Moon Win %: {stat_tracker['moon']['win_percent']:.2f}\n\
+        Moon ETH Wagered: {stat_tracker['moon']['wagered']}\n\
+        Moon Winnings: {stat_tracker['moon']['winnings']}\n\n\
+{bcolors.OKRED}\
+        Doom Entries: {stat_tracker['doom']['entry_count']}\n\
+        Doom Wins: {stat_tracker['doom']['wins']}\n\
+        Doom Win %: {stat_tracker['doom']['win_percent']:.2f}\n\
+        Doom ETH Wagered: {stat_tracker['doom']['wagered']}\n\
+        Doom Winnings: {stat_tracker['doom']['winnings']}\n\n\
+\
+{bcolors.OKCYAN}Session Profit: {bcolors.BURNTORANGE}{stat_tracker['total']['winnings']}{bcolors.OKCYAN} ETH\t\t\t\t{bcolors.OKCYAN}Total Gas Fees: {bcolors.BURNTORANGE}$ {round(stat_tracker['gas_fees']['total'], 2)}{bcolors.OKCYAN} USD\n\
+{bcolors.OKCYAN}Claimable: {bcolors.BURNTORANGE}{unclaimed_win['amount']}{bcolors.OKCYAN} ETH\t\t\t\tAuto-Claim Threshold: {bcolors.BURNTORANGE}{auto_claim_threshold}{bcolors.OKCYAN} ETH{bcolors.ENDC}\
+    ")
 
 
 def receipt_to_dict(txn_receipt):
@@ -374,5 +408,5 @@ class bcolors:
 
 if __name__ == "__main__":
     atexit.register(log_handler)
-    moon_or_doom()
+    asyncio.run(moon_or_doom())
     
